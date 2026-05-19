@@ -1,4 +1,6 @@
 import os
+import random#ランダムのimport
+import math
 import sys
 import pygame as pg
 
@@ -99,49 +101,88 @@ class Obstacle:
     """
 
     def __init__(self):
-        self.x = WIDTH
-        self.y = 450
-
         self.w = 50
         self.h = 50
-
         self.speed = 10
 
-    def update(self):
-        """
-        障害物更新
-        """
+        # 最初の障害物を生成
+        self.reset(is_first=True)
+#障害物をランダムに出るようにするためのメゾット
+    def reset(self, is_first=False):
+        """障害物の状態をランダムにリセットする"""
+        if is_first:
+            self.x = WIDTH
+        else:
+            self.x = WIDTH + random.randint(0, 150)
+        #障害物ののタイプをランダムに決める
+        if is_first:
+            self.move_type = random.choice(["normal", "wavy"])
+        else:
+            self.move_type = random.choices(
+                ["normal", "wavy", "pit"], weights=[5, 3, 2], k=1
+            )[0]
+        self.angle = 0
+        #それぞれのタイプの設定
+        if self.move_type == "wavy":
+            self.base_y = 350  # 上下に動くタイプは少し空中からスタート
+            self.w = 50
+        elif self.move_type == "pit":
+            self.base_y = 500  # 落とし穴は地面の高さからスタート
+            self.w = 150  # 3マス分の幅にする
+        else:
+            self.base_y = 450  # 通常タイプは地面の上
+            self.w = 50
 
+        self.y = self.base_y
+    #落とし穴に関するメゾット
+    def get_ground_y(
+        self, player_x: int, player_w: int, default_ground_y: int
+    ) -> int:
+        """★プレイヤーの位置に応じた『地面の高さ』を計算して返すメソッド"""
+        if self.move_type == "pit":
+            # プレイヤーが落とし穴の上にいるか判定
+            if player_x + player_w > self.x and player_x < self.x + self.w:
+                # 穴の上なら、地面を画面の下（落ちる判定）にする
+                return HEIGHT + 200
+
+        # は穴の上にいないなら通常の地面の高さを返す
+        return default_ground_y
+
+    def update(self):
+        """障害物更新"""
+
+        # 左へ進む
         self.x -= self.speed
 
-        # 画面外へ行ったら戻す
+        ##動く障害物のみMATH.SINを使って上下に揺らす
+        if self.move_type == "wavy":
+            self.angle += 0.08  # 数値を大きくすると上下の揺れが速くなります
+            # math.sinを使って基準の高さから上下に最大70ピクセル揺らす
+            self.y = self.base_y + math.sin(self.angle) * 70
+        else:
+            self.y = self.base_y
+
+        # 画面外へ行ったらリセットして再抽選
         if self.x + self.w < 0:
-            self.x = WIDTH + 300
+            self.reset()
 
     def draw(self, screen: pg.Surface):
-        """
-        障害物描画
-        """
-
-        pg.draw.rect(
-            screen,
-            RED,
-            (self.x, self.y, self.w, self.h)
-        )
+        """障害物描画"""
+        #pit(落とし穴)の場合は、空の色で穴を描き、枠線を黄色にする。それ以外は赤い四角で描く
+        if self.move_type == "pit":
+            hole_rect = pg.Rect(self.x, self.y, self.w, self.h)
+            pg.draw.rect(screen, SKY, hole_rect)
+            pg.draw.rect(screen, YELLOW, hole_rect, 4)
+        else:
+            pg.draw.rect(screen, RED, (self.x, self.y, self.w, self.h))
 
     def get_rect(self) -> pg.Rect:
-        """
-        Rect取得
-        """
+        """Rect取得"""
+        #落とし穴自体は「ぶつかってゲームオーバーになる障害物」ではないため、衝突判定をサイズ0にして無効化する
+        if self.move_type == "pit":
+            return pg.Rect(0, 0, 0, 0)
 
-        return pg.Rect(
-            self.x,
-            self.y,
-            self.w,
-            self.h
-        )
-
-
+        return pg.Rect(self.x, self.y, self.w, self.h)
 # =========================================
 # Backgroundクラス
 # =========================================
@@ -249,11 +290,17 @@ class Game:
 
         if not self.game_over:
 
-            self.player.update(self.ground_y)
+            current_ground_y = self.obstacle.get_ground_y(
+                self.player.x, self.player.w, self.ground_y
+            )
+            self.player.update(current_ground_y)
             self.obstacle.update()
             self.background.update()
 
             self.check_collision()
+
+            if self.player.y > HEIGHT:
+                self.game_over = True
 
             # スコア加算
             self.score += 0.1

@@ -1,6 +1,7 @@
 import os
 import sys
 import pygame as pg
+import random
 
 
 # =========================================
@@ -63,7 +64,7 @@ class Player:
             self.vy = self.jump_power
             self.on_ground = False
 
-    def update(self, ground_y: int):
+    def update(self, ground_y: int, platforms: list):
         """
         プレイヤー更新
         """
@@ -71,11 +72,26 @@ class Player:
         self.vy += self.gravity
         self.y += self.vy
 
+        player_rect = pg.Rect(self.x, self.y, self.w, self.h)
+
+        # 足場判定
+        for pf in platforms:
+            pf_rect = pf.get_rect()
+
+            # 落下中 & 足場の上に乗った
+            if self.vy >= 0 and player_rect.colliderect(pf_rect):
+                if self.y + self.h <= pf.y + 10:
+                    self.y = pf.y - self.h
+                    self.vy = 0
+                    self.on_ground = True
+                    return
+
         # 地面判定
         if self.y + self.h >= ground_y:
             self.y = ground_y - self.h
             self.vy = 0
             self.on_ground = True
+
 
     def draw(self, screen: pg.Surface):
         """
@@ -140,6 +156,33 @@ class Obstacle:
             self.w,
             self.h
         )
+
+# =========================================
+# Platformクラス
+# =========================================    
+class Platform:
+    """
+    ランダム足場クラス
+    """
+
+    def __init__(self):
+        self.w = random.randint(80, 200)
+        self.h = 20
+
+        self.x = WIDTH
+        self.y = random.randint(300, 450)
+
+        self.speed = 10
+
+    def update(self):
+        self.x -= self.speed
+
+    def draw(self, screen: pg.Surface):
+        pg.draw.rect(screen, GRAY, (self.x, self.y, self.w, self.h))
+
+    def get_rect(self):
+        return pg.Rect(self.x, self.y, self.w, self.h)
+
 
 
 # =========================================
@@ -217,6 +260,9 @@ class Game:
         self.font = pg.font.Font(None, 50)
         self.big_font = pg.font.Font(None, 80)
 
+        self.platforms = []
+        self.platform_timer = 0
+
         self.game_over = False
 
         # スコア
@@ -249,11 +295,24 @@ class Game:
 
         if not self.game_over:
 
-            self.player.update(self.ground_y)
+            self.player.update(self.ground_y, self.platforms)
             self.obstacle.update()
             self.background.update()
 
             self.check_collision()
+
+            # 足場生成
+            self.platform_timer += 1
+            if self.platform_timer > 90:  # 約1.5秒ごと
+                self.platforms.append(Platform())
+                self.platform_timer = 0
+
+            # 足場更新
+            for pf in self.platforms[:]:
+                pf.update()
+                if pf.x + pf.w < 0:
+                    self.platforms.remove(pf)
+
 
             # スコア加算
             self.score += 0.1
@@ -270,6 +329,10 @@ class Game:
 
         self.player.draw(screen)
         self.obstacle.draw(screen)
+
+        # 足場描画
+        for pf in self.platforms:
+            pf.draw(screen)
 
         # SCORE表示
         score_text = self.font.render(

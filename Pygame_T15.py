@@ -94,7 +94,6 @@ class Player:
         except Exception:
             self.image = None
 
-
     def jump(self):
         """
         接地している場合のみ、上方向の初速を与えてジャンプを開始する。

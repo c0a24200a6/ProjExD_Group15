@@ -238,6 +238,33 @@ class Background:
                 (x + self.scroll_x, ground_y + 40, 50, 10)
             )
 
+# =========================================
+# Pauseクラス
+# =========================================
+class Pause:
+    def __init__(self, font, big_font):
+        self.font = font
+        self.big_font = big_font
+        self.active = False  # ポーズ中かどうか
+
+    def toggle(self):
+        self.active = not self.active
+
+    def draw(self, screen):
+        overlay = pg.Surface((WIDTH, HEIGHT))
+        overlay.set_alpha(180)
+        overlay.fill(BLACK)
+        screen.blit(overlay, (0, 0))
+
+        title = self.big_font.render("PAUSED", True, WHITE)
+        screen.blit(title, title.get_rect(center=(WIDTH//2, HEIGHT//2 - 60)))
+
+        msg1 = self.font.render("R : Restart", True, WHITE)
+        msg2 = self.font.render("T : Reset", True, WHITE)
+
+        screen.blit(msg1, (WIDTH//2 - 100, HEIGHT//2 + 10))
+        screen.blit(msg2, (WIDTH//2 - 100, HEIGHT//2 + 60))
+
 
 # =========================================
 # Gameクラス
@@ -259,6 +286,8 @@ class Game:
 
         self.font = pg.font.Font(None, 50)
         self.big_font = pg.font.Font(None, 80)
+
+        self.pause = Pause(self.font, self.big_font)
 
         self.game_over = False
 
@@ -296,26 +325,32 @@ class Game:
         更新処理
         """
 
-        if not self.game_over:
+        if self.pause.active or self.game_over:
+                return
+        
+        self.player.update(self.ground_y)
+        self.obstacle.update()
+        self.background.update()
 
-            current_ground_y = self.obstacle.get_ground_y(
-                self.player.x, self.player.w, self.ground_y
-            )
-            self.player.update(current_ground_y)
-            self.obstacle.update()
-            self.background.update()
-            self.item.update() # アイテム更新
+        current_ground_y = self.obstacle.get_ground_y(
+            self.player.x, self.player.w, self.ground_y
+        )
+        self.player.update(current_ground_y)
+        self.obstacle.update()
+        self.background.update()
+        self.item.update() # アイテム更新
 
-            self.check_collision()
+        self.check_collision()
 
-            if self.player.y > HEIGHT:
-                self.game_over = True
+        # スコア加算
+        self.score += 0.1
 
-            # スコア加算
-            self.score += 0.1
+        if self.player.y > HEIGHT:
+            self.game_over = True
 
-            # 距離加算
-            self.distance += self.obstacle.speed
+
+        # 距離加算
+        self.distance += self.obstacle.speed
 
     def draw(self, screen: pg.Surface):
         """
@@ -372,6 +407,17 @@ class Game:
             )
 
             screen.blit(result_distance, distance_rect)
+
+            retry_text = self.font.render("Press R to Restart", True, WHITE)
+            retry_rect = retry_text.get_rect(center=(WIDTH // 2, HEIGHT // 2 + 80))
+            screen.blit(retry_text, retry_rect)
+
+            return
+        
+        # Pause画面
+        if self.pause.active:
+            self.pause.draw(screen)
+            return
 
 
 # =========================================
@@ -445,6 +491,25 @@ def main():
                 running = False
 
             if event.type == pg.KEYDOWN:
+                #gameover中の操作
+                if game.game_over:
+                    if event.key == pg.K_r:
+                        game = Game()
+                    continue
+
+                # Pキーでポーズ切り替え
+                if event.key == pg.K_p:
+                    game.pause.toggle()
+
+                # ポーズ中の操作
+                if game.pause.active:
+                    if event.key == pg.K_r:  # 再開
+                        game.pause.active = False
+
+                    if event.key == pg.K_t:  # リセット
+                        game = Game()
+
+                    continue
 
                 if event.key == pg.K_SPACE:
                     game.player.jump()

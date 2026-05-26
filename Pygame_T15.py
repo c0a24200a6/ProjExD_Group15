@@ -55,7 +55,7 @@ BLUE = (0, 100, 255)
 SKY = (135, 206, 235)
 GRAY = (200, 200, 200)
 YELLOW = (255, 255, 0)
-
+BROWN = (85,42,12)
 
 # =========================================
 # Playerクラス
@@ -81,8 +81,6 @@ class Player:
         self.gravity = 0.8      # 毎フレーム加算される重力加速度
         self.jump_power = -15   # ジャンプ時に与えられる初速（負の値で上方向）
 
-        self.gravity = 0.8
-        self.jump_power = -15
 
         # 状態フラグ
         self.on_ground = True   # 接地しているかどうか（空中ジャンプ防止用）
@@ -111,7 +109,7 @@ class Player:
             self.nidanjump = True
 
 
-    def turbo(self):
+    def turbo(self,score):
         """
         地面に足がついている、または一段ジャンプをしている最中にシフトキーを押すと、ロケットのように上方向の速度を与える。
         ただし、二段ジャンプ中には使用できないようにする。
@@ -119,13 +117,17 @@ class Player:
         # 現在のすべてのキーの入力状態を取得
         keys = pg.key.get_pressed()
 
-        # 左シフトまたは右シフトが押されているか判定
         if keys[pg.K_LSHIFT] or keys[pg.K_RSHIFT]:
-            # 地面にいるまたは二段ジャンプ中ではない
+
+        # スコア不足なら使えない
+            if score <= 0:
+                return False
+
             if self.on_ground or (not self.on_ground and not self.nidanjump):
-                
-                # 上方向への推進力
                 self.vy = -8
+                return True
+
+        return False
 
     def update(self, ground_y: int):
         """
@@ -142,6 +144,10 @@ class Player:
             self.vy = 0
             self.on_ground = True
             self.nidanjump = False
+            
+        if self.y < 0:
+            self.y = 0  # 天井の位置でピタッと止める
+            self.vy = 0 # 上方向への速度をゼロにする
 
     def draw(self, screen: pg.Surface):
         """
@@ -176,8 +182,8 @@ class Obstacle:
         # 初期出現位置（画面の右端外側）とサイズ
         self.x = WIDTH
         self.y = 450
-        self.w = 50
-        self.h = 50
+        self.w = 80
+        self.h = 80
 
         # 移動速度
         self.speed = 10
@@ -208,13 +214,16 @@ class Obstacle:
         #それぞれのタイプの設定
         if self.move_type == "wavy":
             self.base_y = 350  # 上下に動くタイプは少し空中からスタート
-            self.w = 50
+            self.w = 80
+            self.h = 80
         elif self.move_type == "pit":
             self.base_y = 500  # 落とし穴は地面の高さからスタート
             self.w = 150  # 3マス分の幅にする
+            self.h = 200
         else:
             self.base_y = 450  # 通常タイプは地面の上
-            self.w = 50
+            self.w = 80
+            self.h = 80
 
         self.y = self.base_y
     #落とし穴に関するメゾット
@@ -266,10 +275,8 @@ class Obstacle:
         #pit(落とし穴)の場合は、空の色で穴を描き、枠線を黄色にする。それ以外は赤い四角で描く
         if self.move_type == "pit":
             hole_rect = pg.Rect(self.x, self.y, self.w, self.h)
-            pg.draw.rect(screen, SKY, hole_rect)
-            pg.draw.rect(screen, YELLOW, hole_rect, 4)
-        else:
-            pg.draw.rect(screen, RED, (self.x, self.y, self.w, self.h))
+            pg.draw.rect(screen, BLACK, hole_rect)
+            pg.draw.rect(screen, BLACK, hole_rect, 4)
 
     def get_rect(self) -> pg.Rect:
         """Rect取得"""
@@ -330,17 +337,17 @@ class Background:
         # レイヤー3: 地面（固定の黒い矩形）
         pg.draw.rect(
             screen,
-            BLACK,
+            BROWN,
             (0, ground_y, WIDTH, HEIGHT-ground_y)
         )
 
         # レイヤー4: 地面の模様（スクロール付きの黄色いライン）
-        for x in range(0, WIDTH + 100, 100):
-            pg.draw.rect(
-                screen,
-                YELLOW,
-                (x + self.scroll_x, ground_y + 40, 50, 10)
-            )
+        # for x in range(0, WIDTH + 100, 100):
+        #     pg.draw.rect(
+        #         screen,
+        #         YELLOW,
+        #         (x + self.scroll_x, ground_y + 40, 50, 10)
+        #     )
 
 # =========================================
 # Pauseクラス
@@ -411,10 +418,10 @@ class Game:
         """
         # プレイヤーの現在位置からRectを生成
         player_rect = pg.Rect(
-            self.player.x,
-            self.player.y,
-            self.player.w,
-            self.player.h
+            self.player.x + 10,
+            self.player.y + 15,
+            self.player.w - 20,
+            self.player.h - 15
         )
 
         # 障害物のRectを取得
@@ -438,13 +445,17 @@ class Game:
         if self.pause.active or self.game_over:
                 return
         
-        self.player.update(self.ground_y)
-        self.obstacle.update()
-        self.background.update()
-
         current_ground_y = self.obstacle.get_ground_y(
             self.player.x, self.player.w, self.ground_y
         )
+
+        # 1. 物理計算の前にまずキー入力を確定させ、スコア判定を通す
+        # ★turboメソッド内で、スコアが0以下になった瞬間に上向きの移動量を完全にリセットします
+        if self.player.turbo(self.score):
+            self.score -= 0.8  # ターボ中の消費速度
+            if self.score < 0:
+                self.score = 0
+
         self.player.update(current_ground_y)
         self.obstacle.update()
         self.background.update()
@@ -476,7 +487,7 @@ class Game:
         score_text = self.font.render(
             f"SCORE : {int(self.score)}",
             True,
-            BLACK
+            WHITE
         )
         screen.blit(score_text, (20, 20))
 
@@ -554,10 +565,25 @@ class Item:
         アイテム描画
         """
 
-        pg.draw.rect(
+        # pg.draw.rect(
+        #     screen,
+        #     YELLOW,
+        #     (self.x, self.y, self.w, self.h)
+
+        # 外側の金色
+        pg.draw.circle(
             screen,
-            YELLOW,
-            (self.x, self.y, self.w, self.h)
+            (255, 215, 0),
+            (int(self.x + self.w // 2), int(self.y + self.h // 2)),
+            self.w // 2
+        )
+
+        # 内側の明るい円
+        pg.draw.circle(
+            screen,
+            (255, 255, 100),
+            (int(self.x + self.w // 2), int(self.y + self.h // 2)),
+            self.w // 3
         )
 
     def get_rect(self) -> pg.Rect:
@@ -621,7 +647,7 @@ def main():
                 # TODO: ここに「ゲームオーバー時にRキーでリスタート」などの判定を追加しやすい
 
         # --- 更新・計算部 ---
-        game.player.turbo()  # ターボはキーの押下状態で常に判定する
+        
         game.update()
 
         # --- 描画部 ---

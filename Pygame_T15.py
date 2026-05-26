@@ -17,9 +17,29 @@ FPS = 60
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 pg.init()
+#ひだ
+try:
+    pg.mixer.init()
+except Exception:
+    pass
+
 screen = pg.display.set_mode((WIDTH, HEIGHT))
 clock = pg.time.Clock()
 
+#ひだ ジャンプ音
+jump_sound = None
+try:
+    jump_sound = pg.mixer.Sound(os.path.join('fig', 'jump1.wav'))
+except Exception:
+    jump_sound = None
+
+# BGM
+try:
+    pg.mixer.music.load(os.path.join('fig', '追跡者.mp3'))
+    pg.mixer.music.set_volume(0.4)
+    pg.mixer.music.play(-1)
+except Exception:
+    pass
 
 # =========================================
 # 色
@@ -56,6 +76,12 @@ class Player:
         self.jump_power = -15
 
         self.on_ground = True
+        #ひだ
+        self.image = None
+        try:
+            self.image = pg.image.load(os.path.join('fig', 'player1.png')).convert_alpha()
+        except Exception:
+            self.image = None
 
     def jump(self):
         """
@@ -65,6 +91,9 @@ class Player:
         if self.on_ground:
             self.vy = self.jump_power
             self.on_ground = False
+            #ひだ ジャンプ音
+            if jump_sound:
+                jump_sound.play()
 
     def update(self, ground_y: int):
         """
@@ -84,12 +113,16 @@ class Player:
         """
         プレイヤー描画
         """
-
-        pg.draw.rect(
-            screen,
-            BLUE,
-            (self.x, self.y, self.w, self.h)
-        )
+    #ひだ
+        if self.image:
+            img = pg.transform.smoothscale(self.image, (self.w, self.h))
+            screen.blit(img, (self.x, self.y))
+        else:
+            pg.draw.rect(
+                screen,
+                BLUE,
+                (self.x, self.y, self.w, self.h)
+            )
 
 
 # =========================================
@@ -105,6 +138,12 @@ class Obstacle:
         self.w = 50
         self.h = 50
         self.speed = 10
+        #ひだ
+        self.image = None
+        try:
+            self.image = pg.image.load(os.path.join('fig', 'shougaibutsu1.png')).convert_alpha()
+        except Exception:
+            self.image = None
 
         # 最初の障害物を生成
         self.reset(is_first=True)
@@ -168,7 +207,19 @@ class Obstacle:
             self.reset()
 
     def draw(self, screen: pg.Surface):
-        """障害物描画"""
+        """
+        障害物描画
+        """
+    #ひだ
+        if self.image:
+            img = pg.transform.smoothscale(self.image, (self.w, self.h))
+            screen.blit(img, (self.x, self.y))
+        else:
+            pg.draw.rect(
+                screen,
+                RED,
+                (self.x, self.y, self.w, self.h)
+            )
         #pit(落とし穴)の場合は、空の色で穴を描き、枠線を黄色にする。それ以外は赤い四角で描く
         if self.move_type == "pit":
             hole_rect = pg.Rect(self.x, self.y, self.w, self.h)
@@ -196,6 +247,12 @@ class Background:
     def __init__(self):
         self.scroll_x = 0
         self.scroll_speed = 10
+        #ひだ
+        self.image = None
+        try:
+            self.image = pg.image.load(os.path.join('fig', 'background1.png')).convert()
+        except Exception:
+            self.image = None
 
     def update(self):
         """
@@ -203,8 +260,12 @@ class Background:
         """
 
         self.scroll_x -= self.scroll_speed
-
-        if self.scroll_x <= -100:
+        #ひだ
+        if self.image:
+            img_w = self.image.get_width()
+            if self.scroll_x <= -img_w:
+                self.scroll_x += img_w
+        elif self.scroll_x <= -100:
             self.scroll_x = 0
 
     def draw(self, screen: pg.Surface, ground_y: int):
@@ -212,16 +273,15 @@ class Background:
         背景描画
         """
 
-        # 空
-        screen.fill(SKY)
-
-        # 背景の縦線
-        for x in range(0, WIDTH + 100, 100):
-            pg.draw.rect(
-                screen,
-                GRAY,
-                (x + self.scroll_x, 0, 5, HEIGHT)
-            )
+        #ひだ
+        if self.image:
+            img_w = self.image.get_width()
+            bx = int(self.scroll_x % img_w) - img_w
+            while bx < WIDTH:
+                screen.blit(self.image, (bx, 0))
+                bx += img_w
+        else:
+            screen.fill(SKY)
 
         # 地面
         pg.draw.rect(
